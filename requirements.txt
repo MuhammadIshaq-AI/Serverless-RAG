@@ -1,5 +1,10 @@
-boto3==1.34.0
-pinecone-client==3.1.0
-requests==2.31.0
-PyPDF2==3.0.1
-pydantic==2.5.3
+boto3
+pinecone-client
+requests
+PyPDF2
+pydantic
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+langchain-text-splitters

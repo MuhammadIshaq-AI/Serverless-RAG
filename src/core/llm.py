@@ -8,7 +8,7 @@ class OllamaClient:
         self.llm_model = Config.OLLAMA_LLM_MODEL
 
     def get_embeddings(self, text: str) -> list[float]:
-        """Generate embeddings using local Ollama on EC2."""
+        """Generate embeddings using local Ollama."""
         url = f"{self.base_url}/api/embeddings"
         payload = {
             "model": self.embedding_model,
