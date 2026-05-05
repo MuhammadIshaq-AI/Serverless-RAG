@@ -1,31 +1,39 @@
-import json
-import base64
+import urllib.parse
+import boto3
+import os
 from src.core.chunking import extract_text_from_pdf, chunk_text
 from src.core.llm import OllamaClient
 from src.core.vector_db import PineconeManager
 
+s3_client = boto3.client('s3')
+
 def handler(event, context):
     """
-    AWS Lambda handler for document upload.
-    Expects base64 encoded PDF in the event body.
+    AWS Lambda handler for S3 object creation event.
+    Triggered automatically when a PDF is uploaded to the S3 bucket.
     """
     try:
-        body = json.loads(event.get("body", "{}"))
-        file_content = body.get("file_content")
-        file_name = body.get("file_name", "document.pdf")
+        # Get the bucket and object key from the Event
+        bucket = event['Records'][0]['s3']['bucket']['name']
+        key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
         
-        if not file_content:
-            return {"statusCode": 400, "body": json.dumps({"error": "No file content provided"})}
-            
-        pdf_bytes = base64.b64decode(file_content)
+        if not key.endswith('.pdf'):
+            print(f"Skipping non-PDF file: {key}")
+            return {"statusCode": 200, "body": "Skipped non-PDF file"}
+
+        print(f"Processing PDF from S3: {bucket}/{key}")
         
-        # 1. Extract text
+        # 1. Download file from S3
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        pdf_bytes = response['Body'].read()
+        
+        # 2. Extract text
         text = extract_text_from_pdf(pdf_bytes)
         
-        # 2. Chunk text
+        # 3. Chunk text
         chunks = chunk_text(text)
         
-        # 3. Generate embeddings and prepare for Pinecone
+        # 4. Generate embeddings and prepare for Pinecone
         llm = OllamaClient()
         db = PineconeManager()
         
@@ -33,28 +41,25 @@ def handler(event, context):
         for i, chunk in enumerate(chunks):
             embedding = llm.get_embeddings(chunk)
             vectors.append({
-                "id": f"{file_name}_chunk_{i}",
+                "id": f"{key}_chunk_{i}",
                 "values": embedding,
                 "metadata": {
                     "text": chunk,
-                    "source": file_name
+                    "source": key
                 }
             })
             
-        # 4. Upsert to Pinecone
-        # Batch upsert in chunks of 100
+        # 5. Upsert to Pinecone in batches
         batch_size = 100
         for i in range(0, len(vectors), batch_size):
             db.upsert_vectors(vectors[i:i + batch_size])
             
+        print(f"Successfully indexed {len(chunks)} chunks into Pinecone.")
         return {
             "statusCode": 200,
-            "body": json.dumps({"message": f"Successfully processed and embedded {len(chunks)} chunks from {file_name}"})
+            "body": f"Successfully processed and embedded {len(chunks)} chunks from {key}"
         }
         
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
+        print(f"Error processing S3 event: {str(e)}")
+        raise e

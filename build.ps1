@@ -7,7 +7,7 @@ Write-Host "Creating build directory..."
 New-Item -ItemType Directory -Force -Path "build" | Out-Null
 
 Write-Host "Installing dependencies..."
-pip install -r requirements.txt -t ./build
+pip install -r requirements-lambda.txt -t ./build
 
 Write-Host "Copying source code..."
 # Copy the contents of src to build
